@@ -10,6 +10,8 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Discord;
 using Logic.Publix;
+using System.Reflection.Metadata.Ecma335;
+using PubSub.Models;
 
 namespace PubSub.Modules
 {
@@ -34,43 +36,118 @@ namespace PubSub.Modules
             string info = "Looks for current deals on Publix Subs ";
             return ReplyAsync(info);
         }
-
+        
         [Command("deals")]
         [Summary("Returns current deals for pub subs by zip code")]
-        public async Task GetWinnersByYear([Remainder] string args = null)
+        public async Task GetSubDealsByZipCode([Remainder] string args = null)
         {
-            args = (args != null && args.Contains("-")) ? args.Split("-")[0] : args;
+            // create array if contains a space if not make a default array
+            var zips = (args != null && args.Contains(" ")) ? args.Trim().Split(" ").Distinct().ToList() : new string[]{ args }.ToList();
 
-            if (args == null || !Regex.IsMatch(args, @"^\d+$"))
-            {                
-                await Context.Channel.SendMessageAsync($"{Context.User.Username}... how about a valid 5 digit zip code?");
-                return;
+            // store data for subs to be published nicely to Discord
+            var fields = new List<EmbedFieldBuilder>();
+
+            // fix any 
+            for (int i = 0; i < zips.Count; i++)
+            {
+                string zip = zips[i];
+
+                // remove any 9 digit zips and use the 5 digit zip
+                zip = (zip != null && zip.Contains("-")) ? zip.Split("-")[0] : zip;
+
+                // ensure 5 digit zip is a valid number
+                if (zip == null || !Regex.IsMatch(zip, @"^\d+$"))
+                {
+                    continue;
+                }
+
+                fields = GetSubDeals(zip, fields);
             }
 
-            var storeList = Publix.GetStoreListAsync(args).Result;
+            if (fields.Count > 0)
+            {
+                await Context.Channel.SendMessageAsync("", false, EmbedBuilderBot("PubSub Deals For Zip Code(s) Supplied", fields).Build());
+            }
+            else
+            {
+                await Context.Channel.SendMessageAsync($"{Context.User.Username}... Unable to find any deals with the data supplied.");
+            }
+        }
+
+        public List<EmbedFieldBuilder> GetSubDeals(string zipCode, List<EmbedFieldBuilder> fields)
+        {
+            var storeList = Publix.GetStoreListAsync(zipCode).Result;
+
+            var deals = new List<Deals>();
 
             if (storeList == null || !storeList.Stores.Any())
             {
-                await Context.Channel.SendMessageAsync($"{Context.User.Username}... No stores found for your zip code.");
-                return;
+
+                deals.Add(new Models.Deals()
+                {
+                    endDate = new DateTime(),
+                    startDate = new DateTime(),
+                    rollover = new Rollover()
+                    {
+                        Title = $"Deals for Zip Code {zipCode}",
+                        Deal = $"No deals available for {zipCode}, there likely isn't a Publix in that Zip Code",
+                        ID = -1
+                    }
+                });
+
+                fields.Add(new EmbedFieldBuilder()
+                {
+                    IsInline = false,
+                    Name = $"Deals for Zip Code {zipCode}",
+                    Value = $"No deals available for {zipCode}, there likely isn't a Publix in that Zip Code."
+                });
+
+                return fields;
             }
 
             var storeRef = storeList.Stores.First(a => string.IsNullOrWhiteSpace(a.Status)).Key;
 
             var ad = Publix.GetDealsByStoreAsync(storeRef).Result;
-            
+
             if (ad.Promotion == null)
             {
-                await Context.Channel.SendMessageAsync($"{Context.User.Username}... No deals available for " + args + ", there likely isn't a Publix in that Zip Code.");
-                return;
+                fields.Add(new EmbedFieldBuilder()
+                {
+                    IsInline = false,
+                    Name = $"Deals for Zip Code {zipCode}",
+                    Value = $"No deals available for {zipCode}, there likely isn't a Publix in that Zip Code."
+                });
+
+                return fields;
             }
 
             var startDate = DateTime.ParseExact(ad.Promotion.SaleStartDateString, "MMM dd, yyyy hh:mm:ss tt", CultureInfo.CurrentCulture);
             var endDate = DateTime.ParseExact(ad.Promotion.SaleEndDateString, "MMM dd, yyyy hh:mm:ss tt", CultureInfo.CurrentCulture);
 
-            var subs = ad.Promotion.Rollovers.Where(a => a.Title.Contains("Whole Sub")).ToList();
+            var subs = ad.Promotion.Rollovers.Where(a => a.Title.Contains("Whole Sub"));
 
-            await Context.Channel.SendMessageAsync("", false, Deals(subs, args, startDate, endDate).Build());
+
+
+            var headerField = new EmbedFieldBuilder()
+            {
+                IsInline = false,
+                Name = $"Deals for Zip Code {zipCode}",
+                Value = $"From {startDate.ToShortDateString()} To {endDate.ToShortDateString()}"
+            };
+
+            fields.Add(headerField);
+
+            foreach (var sub in subs)
+            {
+                fields.Add(new EmbedFieldBuilder()
+                {
+                    IsInline = false,
+                    Name = sub.Title,
+                    Value = sub.Deal
+                });
+            }
+
+            return fields;
         }
 
         private Discord.EmbedBuilder Deals(List<Rollover> subs, string zipCode, DateTime startDate, DateTime endDate)

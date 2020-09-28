@@ -31,6 +31,7 @@ namespace Logic.Publix
                         deal
                         isCoupon
                         buyOnlineLinkURL
+                        imageCommon: imageURL(imageWidth: 600, previewHash: $previewHash, require: $require)
                     }
                     pages(imageWidth: 1400, previewHash: $previewHash, require: $require, nuepOpen: $nuepOpen) {
                         id
