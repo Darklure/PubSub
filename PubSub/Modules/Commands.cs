@@ -49,13 +49,13 @@ namespace PubSub.Modules
 
             var storeList = Publix.GetStoreListAsync(args).Result;
 
-            if (storeList["Stores"] == null || storeList["Stores"].Count() == 0)
+            if (storeList == null || !storeList.Stores.Any())
             {
                 await Context.Channel.SendMessageAsync($"{Context.User.Username}... No stores found for your zip code.");
                 return;
             }
 
-            var storeRef = storeList["Stores"][0]["KEY"].ToString();
+            var storeRef = storeList.Stores.First(a => string.IsNullOrWhiteSpace(a.Status)).Key;
 
             var ad = Publix.GetDealsByStoreAsync(storeRef).Result;
             

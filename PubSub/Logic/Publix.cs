@@ -1,8 +1,11 @@
 ﻿using GraphQL;
 using GraphQL.Client.Http;
 using GraphQL.Client.Serializer.Newtonsoft;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using PubSub.Models;
 using PubSub.Models.GraphQL.PublixAd;
+using PubSub.Models.StoreInfo;
 using PubSub.Utils;
 using System;
 using System.Threading.Tasks;
@@ -37,13 +40,13 @@ namespace Logic.Publix
                 }
              }";
 
-        public static async Task<JObject> GetStoreListAsync(string zipCode)
+        public static async Task<StoreList> GetStoreListAsync(string zipCode)
         {
             var url = "https://services.publix.com/api/v1/storelocation?types=R,G,H,N,S&option=&count=15&includeOpenAndCloseDates=true&zipCode={0}";
 
             var storesResponse = await WebClient.GetString(string.Format(url, zipCode), "application/json");
 
-            var storeList = JObject.Parse(storesResponse);
+            var storeList = JsonConvert.DeserializeObject<StoreList>(storesResponse, PubSub.Models.StoreInfo.Converter.Settings);
 
             return storeList;
         }
